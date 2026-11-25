@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* Native modal dialog scroll containment (modern-web-guidance: dialog) */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  background: rgb(2 6 23 / 0.72);
+  backdrop-filter: blur(3px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Keyboard-scrollable sticky-header data tables (modern-web-guidance: responsive-table) */
+.table-wrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(460px, 65vh);
+}
+
+.lake-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.lake-table thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+}
+
+/* Native <progress> styling (modern-web-guidance: progress) */
+progress.lake-progress {
+  appearance: none;
+  border: 0 solid;
+  border-radius: 9999px;
+  overflow: clip;
+  background-color: rgb(30 41 59);
+  height: 0.5rem;
+  width: 100%;
+  container-type: inline-size;
+}
+
+progress.lake-progress::-webkit-progress-bar {
+  background: transparent;
+}
+
+progress.lake-progress::-webkit-progress-value {
+  background: rgb(99 102 241);
+  border-radius: 9999px;
+  transition: inline-size 0.25s ease;
+}
+
+progress.lake-progress::-moz-progress-bar {
+  background: rgb(99 102 241);
+  border-radius: 9999px;
+}
+
+/* Tab active indicator using border-block-end (modern-web-guidance: tabs) */
+[role="tab"] {
+  position: relative;
+}
+
+[role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  border-block-end: 2px solid rgb(129 140 248);
+}
