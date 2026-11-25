@@ -1,24 +1,33 @@
 import { useEffect, useState } from "react";
 import { Database, Layers, MessageSquare } from "lucide-react";
 import { getHealth, type HealthStatus } from "./api/dataClient";
-import { ChatPlaceholderView } from "./components/chat/ChatPlaceholderView";
+import { getRagHealth, type RagHealthStatus } from "./api/ragClient";
+import { ChatWorkspaceView } from "./components/chat/ChatWorkspaceView";
 import { DataLakehouseView } from "./components/lakehouse/DataLakehouseView";
 
 type AppSection = "lakehouse" | "chat";
 
 export function App() {
   const [section, setSection] = useState<AppSection>("lakehouse");
-  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [dataHealth, setDataHealth] = useState<HealthStatus | null>(null);
+  const [ragHealth, setRagHealth] = useState<RagHealthStatus | null>(null);
 
   useEffect(() => {
     let active = true;
     const poll = () => {
       getHealth()
         .then((h) => {
-          if (active) setHealth(h);
+          if (active) setDataHealth(h);
         })
         .catch(() => {
-          if (active) setHealth({ status: "offline", postgres: false, minio: false });
+          if (active) setDataHealth({ status: "offline", postgres: false, minio: false });
+        });
+      getRagHealth()
+        .then((h) => {
+          if (active) setRagHealth(h);
+        })
+        .catch(() => {
+          if (active) setRagHealth({ status: "offline", postgres: false, duckdb: false });
         });
     };
     poll();
@@ -70,36 +79,46 @@ export function App() {
               >
                 <MessageSquare className="h-4 w-4" />
                 AI Chat
-                <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-normal text-slate-400">
-                  Phase 6
-                </span>
               </button>
             </nav>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <span
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${
-                health?.status === "ok"
+                dataHealth?.status === "ok"
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
                   : "border-rose-500/30 bg-rose-500/10 text-rose-300"
               }`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  health?.status === "ok" ? "bg-emerald-400" : "bg-rose-400"
+                  dataHealth?.status === "ok" ? "bg-emerald-400" : "bg-rose-400"
                 }`}
               />
-              {health?.status === "ok"
-                ? "Data Engine + MinIO + pgvector"
-                : "Data Engine Offline"}
+              {dataHealth?.status === "ok" ? "Data Engine OK" : "Data Engine Offline"}
+            </span>
+
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${
+                ragHealth?.status === "ok"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  ragHealth?.status === "ok" ? "bg-emerald-400" : "bg-rose-400"
+                }`}
+              />
+              {ragHealth?.status === "ok" ? "RAG Engine OK" : "RAG Engine Offline"}
             </span>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        {section === "lakehouse" ? <DataLakehouseView /> : <ChatPlaceholderView />}
+        {section === "lakehouse" ? <DataLakehouseView /> : <ChatWorkspaceView />}
       </main>
     </div>
   );

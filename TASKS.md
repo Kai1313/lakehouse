@@ -98,14 +98,14 @@
 **Goal**: Build the standalone FastAPI + `uv` RAG engine with LiteLLM dynamic model switching, Hybrid RAG + DuckDB Text-to-SQL tool calling, SSE streaming, and persisted conversations.
 
 ### Tasks
-- [ ] **5.1** Initialize `rag-engine/` (`pyproject.toml` with `uv`, FastAPI, `litellm`, `duckdb`, `psycopg`, `pydantic-settings`, `pyyaml`).
-- [ ] **5.2** Create `models.yaml` registry (Claude, DeepSeek, Google Gemini, OpenAI, Groq, Ollama) and `GET /models` inspecting `.env` API keys to report configured vs. unconfigured models.
-- [ ] **5.3** Implement Postgres persistence endpoints: `GET /conversations`, `POST /conversations`, `GET /conversations/{id}`, `DELETE /conversations/{id}`.
-- [ ] **5.4** Implement `app/tools/vector_search.py` (`search_documents` using `litellm.embedding` + `pgvector` cosine similarity returning filename, page, score, content).
-- [ ] **5.5** Implement `app/tools/sql_query.py` (`query_tabular_data` using read-only DuckDB + `delta` + `httpfs` against MinIO Silver tables, registering views from `data_engine.silver_tables`):
+- [x] **5.1** Initialize `rag-engine/` (`pyproject.toml` with `uv`, FastAPI, `litellm`, `duckdb`, `psycopg`, `pydantic-settings`, `pyyaml`).
+- [x] **5.2** Create `models.yaml` registry (Claude, DeepSeek, Google Gemini, OpenAI, Groq, Ollama) and `GET /models` inspecting `.env` API keys to report configured vs. unconfigured models.
+- [x] **5.3** Implement Postgres persistence endpoints: `GET /conversations`, `POST /conversations`, `GET /conversations/{id}`, `DELETE /conversations/{id}`.
+- [x] **5.4** Implement `app/tools/vector_search.py` (`search_documents` using `litellm.embedding` + `pgvector` cosine similarity returning filename, page, score, content).
+- [x] **5.5** Implement `app/tools/sql_query.py` (`query_tabular_data` using read-only DuckDB + `delta` + `httpfs` against MinIO Silver tables, registering views from `data_engine.silver_tables`):
   - Strict SQL validator (`SELECT` / `WITH` only, block DDL/DML/multiple statements, enforce `LIMIT 100`).
-- [ ] **5.6** Implement `app/prompts.py` (domain-agnostic grounded system prompt + live Silver schema/sample-row catalog injection) and `app/llm_router.py` (LiteLLM async streaming + tool-calling loop with max 2 SQL self-correction retries).
-- [ ] **5.7** Implement `POST /conversations/{id}/chat` SSE endpoint emitting `status`, `tool_call`, `tool_result`, `token`, `citations`, `done`, and `error` events, saving assistant messages and `citations_json` to Postgres.
+- [x] **5.6** Implement `app/prompts.py` (domain-agnostic grounded system prompt + live Silver schema/sample-row catalog injection) and `app/llm_router.py` (LiteLLM async streaming + tool-calling loop with max 2 SQL self-correction retries).
+- [x] **5.7** Implement `POST /conversations/{id}/chat` SSE endpoint emitting `status`, `tool_call`, `tool_result`, `token`, `citations`, `done`, and `error` events, saving assistant messages and `citations_json` to Postgres.
 
 ### Phase 5 Test & Review Checkpoint
 - Run `cd rag-engine && uv run uvicorn app.main:app --reload --port 8002`.
@@ -123,8 +123,8 @@
 **Goal**: Replace the `AI Chat` placeholder tab with the full streaming Chat Workspace connected to `rag-engine/`.
 
 ### Tasks
-- [ ] **6.1** Create typed `src/api/ragClient.ts` for conversations, models, and SSE chat streaming.
-- [ ] **6.2** Build **Chat Workspace**:
+- [x] **6.1** Create typed `src/api/ragClient.ts` for conversations, models, and SSE chat streaming.
+- [x] **6.2** Build **Chat Workspace**:
   - Conversation sidebar (create, switch, delete threads).
   - Top bar **AI Model Switcher dropdown** (grouped/badged by provider, disabling unconfigured models).
   - SSE streaming message renderer (Markdown + tables + live tool status indicator).

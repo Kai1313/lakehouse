@@ -1,0 +1,54 @@
+models:
+  - id: deepseek/deepseek-chat
+    label: DeepSeek V3 (Chat)
+    provider: deepseek
+    env_key: DEEPSEEK_API_KEY
+    supports_tools: true
+
+  - id: deepseek/deepseek-reasoner
+    label: DeepSeek Reasoner (R1)
+    provider: deepseek
+    env_key: DEEPSEEK_API_KEY
+    supports_tools: true
+
+  - id: gemini/gemini-2.5-flash
+    label: Gemini 2.5 Flash
+    provider: gemini
+    env_key: GEMINI_API_KEY
+    supports_tools: true
+
+  - id: gemini/gemini-2.5-pro
+    label: Gemini 2.5 Pro
+    provider: gemini
+    env_key: GEMINI_API_KEY
+    supports_tools: true
+
+  - id: anthropic/claude-sonnet-4-20250514
+    label: Claude Sonnet 4
+    provider: anthropic
+    env_key: ANTHROPIC_API_KEY
+    supports_tools: true
+
+  - id: openai/gpt-4o-mini
+    label: GPT-4o Mini
+    provider: openai
+    env_key: OPENAI_API_KEY
+    supports_tools: true
+
+  - id: openai/gpt-4o
+    label: GPT-4o
+    provider: openai
+    env_key: OPENAI_API_KEY
+    supports_tools: true
+
+  - id: groq/llama-3.3-70b-versatile
+    label: Groq Llama 3.3 70B
+    provider: groq
+    env_key: GROQ_API_KEY
+    supports_tools: true
+
+  - id: ollama/qwen2.5:7b
+    label: Ollama Qwen 2.5 7B (Local)
+    provider: ollama
+    env_key: OLLAMA_API_BASE
+    supports_tools: true
