@@ -27,16 +27,17 @@ A decoupled **Hybrid RAG + Text-to-SQL AI Chatbot** backed by a **Medallion Data
 
 ## Option 1: Full Docker Compose Mode (Recommended for Demo)
 
-Builds and starts all containers behind the Nginx single-origin proxy (`http://localhost:3000`):
+Builds and starts all containers behind the Nginx single-origin proxy (`http://localhost:3100`, configurable via `APP_PORT` in `.env`):
 
 ```bash
 docker compose --profile full up --build -d
 ```
 
-- **App (via Nginx)**: http://localhost:3000
-- **MinIO Console**: http://localhost:9001 (`minioadmin` / `minioadmin`)
-- **Data Engine Swagger**: http://localhost:8001/docs
-- **RAG Engine Swagger**: http://localhost:8002/docs
+- **App (via Nginx)**: http://localhost:3100 (`APP_PORT`)
+- **MinIO Console**: http://localhost:9001 (`MINIO_CONSOLE_PORT`, `minioadmin` / `minioadmin`)
+- **Data Engine Swagger**: http://localhost:8001/docs (`DATA_ENGINE_PORT`)
+- **RAG Engine Swagger**: http://localhost:8002/docs (`RAG_ENGINE_PORT`)
+- **PostgreSQL**: `localhost:5435` (`POSTGRES_PORT`)
 
 Check status:
 ```bash
