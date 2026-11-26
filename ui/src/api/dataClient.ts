@@ -26,6 +26,8 @@ export interface FileRecord {
   file_size_bytes: number;
   bronze_uri: string;
   status: FileStatus;
+  review_status: "needs_review" | "verified";
+  document_note: string;
   error_message: string | null;
   metadata_json: FileMetadata;
   silver_tables: string[];
@@ -48,9 +50,11 @@ export interface UploadResponse {
 }
 
 export interface SilverColumnInfo {
+  index?: number | null;
   name: string;
   original_name: string;
   type: string;
+  keep?: boolean;
 }
 
 export interface SilverTableInfo {
@@ -61,6 +65,9 @@ export interface SilverTableInfo {
   sheet_name: string;
   delta_uri: string;
   row_count: number;
+  review_status: string;
+  header_rows_json: number[];
+  mapping_override_json?: Record<string, unknown> | null;
   columns_json: SilverColumnInfo[];
   sample_rows_json: Record<string, unknown>[];
   created_at: string;
@@ -69,8 +76,46 @@ export interface SilverTableInfo {
 export interface TablePreviewResponse {
   table_name: string;
   row_count: number;
+  review_status: string;
   columns: SilverColumnInfo[];
   rows: Record<string, unknown>[];
+}
+
+export interface RawSheetPreview {
+  sheet_name: string;
+  total_raw_rows: number;
+  rows: unknown[][];
+  detected_header_rows: number[];
+  table_name: string | null;
+  review_status: string;
+  columns: SilverColumnInfo[];
+}
+
+export interface FileRawPreviewResponse {
+  file_id: string;
+  filename: string;
+  file_type: FileType;
+  review_status: "needs_review" | "verified";
+  document_note: string;
+  sheets: RawSheetPreview[];
+}
+
+export interface ColumnMappingOverride {
+  index: number;
+  name: string;
+  type: "VARCHAR" | "BIGINT" | "DOUBLE" | "BOOLEAN";
+  keep: boolean;
+}
+
+export interface SheetMappingOverride {
+  sheet_name: string;
+  header_rows: number[];
+  columns: ColumnMappingOverride[];
+}
+
+export interface ConfirmSilverRequest {
+  document_note?: string | null;
+  sheet_overrides?: SheetMappingOverride[] | null;
 }
 
 export interface DocumentChunkInfo {
@@ -169,6 +214,25 @@ export async function getFileChunks(
     params.set("page", String(options.page));
   }
   const res = await fetch(`${BASE}/files/${fileId}/chunks?${params.toString()}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getRawPreview(fileId: string, rows = 15): Promise<FileRawPreviewResponse> {
+  const res = await fetch(`${BASE}/files/${fileId}/raw-preview?rows=${rows}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function confirmSilver(
+  fileId: string,
+  payload: ConfirmSilverRequest,
+): Promise<FileRecord> {
+  const res = await fetch(`${BASE}/files/${fileId}/confirm-silver`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

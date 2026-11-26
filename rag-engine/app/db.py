@@ -32,7 +32,7 @@ def list_silver_tables() -> list[dict[str, Any]]:
             cur.execute(
                 """
                 SELECT table_name, original_filename, sheet_name, delta_uri,
-                       row_count, columns_json, sample_rows_json
+                       row_count, review_status, columns_json, sample_rows_json
                 FROM data_engine.silver_tables
                 ORDER BY table_name ASC
                 """
@@ -45,7 +45,7 @@ def list_ready_pdf_files() -> list[dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT filename, metadata_json
+                SELECT filename, metadata_json, review_status, document_note
                 FROM data_engine.file_registry
                 WHERE file_type = 'pdf' AND status = 'ready'
                 ORDER BY filename ASC

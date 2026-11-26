@@ -149,3 +149,25 @@
 ### Phase 7 Test & Review Checkpoint
 - Run `docker compose --profile full up --build` from a clean state.
 - Open `http://localhost:3000` and confirm all features work seamlessly through the single-origin Nginx proxy.
+
+---
+
+## Phase 8 — Smart Excel Headers & Silver HITL Review
+**Goal**: Upgrade Excel parsing for multi-row merged headers & locale-aware numbers, and add an inline Human-in-the-Loop (`needs_review` $\rightarrow$ `verified`) Review & Edit Schema workflow across `data-engine`, `rag-engine`, and `ui`.
+
+### Tasks
+- [x] **8.1** Add Postgres schema extensions (`review_status`, `document_note`, `header_rows_json`, `mapping_override_json`, `data_engine.silver_mapping_presets`) in `infra/postgres/init.sql` and safe startup migrations in `data-engine/app/db.py`.
+- [x] **8.2** Upgrade `data-engine/app/parsers/excel_parser.py` for multi-row merged header detection, locale-aware numeric parsing (`14,042.62` and `102,72`, safe `NULL` on explicit cast), and saved preset re-application on re-ingest/re-upload.
+- [x] **8.3** Add `GET /files/{file_id}/raw-preview` and `POST /files/{file_id}/confirm-silver` in `data-engine/` (with tests).
+- [x] **8.4** Add `POST /schema/suggest` (LiteLLM) and inject `review_status` + PDF `document_note` into `rag-engine/` catalog prompts (plus `GET /catalog-status` / unverified table notice).
+- [x] **8.5** Add `Verified` / `Needs Review` badges, inline `Review & Edit Schema` tab in `MedallionInspector`, and non-blocking unverified-table banner in `ChatWorkspaceView`.
+
+### Phase 8 Test & Review Checkpoint
+- Re-ingest or upload `data_laporan_monitoring_semua_pd_fix.xlsx` and verify multi-row headers produce real names (`perangkat_daerah`, `rencana_alokasi_rp`, `rencana_penggunaan_dana_rp`, etc.) instead of `column_1..column_10`.
+- Open **Review & Edit Schema**, test **Auto-Suggest with AI**, edit a column name/type, click **Confirm & Rebuild Silver**, and verify the badge turns `Verified`.
+
+---
+
+## Tech Debt & Future Enhancements
+- [ ] **TD-1 — Gold Business Glossary & KPI Rules**: Add user-editable column descriptions, official domain formulas (e.g., authoritative Pagu/Realisasi/Overbudget/Serapan definitions), Gold curated analytical views, and cross-file join hints (`Monitoring Bulanan` $\leftrightarrow$ `Tabel eBudgeting` $\leftrightarrow$ `rka_skpd_*.pdf`).
+- [ ] **TD-2 — Vision/OCR Fallback for Scanned PDFs**: Process pages flagged `needs_ocr: true` using OCR or Vision LLM during Bronze $\rightarrow$ Silver.

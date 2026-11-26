@@ -40,20 +40,32 @@ def process_file(file_id: UUID) -> None:
 
         if file_type == "excel":
             purge_file_silver_gold(file_id)
+            presets = db.get_mapping_presets_for_filename(filename)
+            review_state = "verified" if presets else "needs_review"
+
             tables = ingest_excel_bytes(
                 source_file_id=file_id,
                 filename=filename,
                 raw_bytes=raw_bytes,
+                sheet_overrides=presets or None,
+                review_status=review_state,
             )
             if not tables:
                 raise ValueError("No non-empty sheets found in Excel workbook.")
 
+            all_verified = all(t.get("review_status") == "verified" for t in tables)
             metadata = {
                 "sheets_count": len(tables),
                 "total_rows": sum(t["row_count"] for t in tables),
                 "tables": [t["table_name"] for t in tables],
             }
-            db.update_file_status(file_id, "ready", error_message=None, metadata_json=metadata)
+            db.update_file_status(
+                file_id,
+                "ready",
+                error_message=None,
+                metadata_json=metadata,
+                review_status="verified" if all_verified else "needs_review",
+            )
 
         elif file_type == "pdf":
             purge_file_silver_gold(file_id)

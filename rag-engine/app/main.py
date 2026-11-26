@@ -6,14 +6,22 @@ from fastapi.responses import StreamingResponse
 
 from app import db
 from app.config import settings
-from app.llm_router import get_model_option, load_models_registry, stream_chat_turn
+from app.llm_router import (
+    get_model_option,
+    load_models_registry,
+    stream_chat_turn,
+    suggest_silver_schema,
+)
 from app.schemas import (
+    CatalogStatusResponse,
     ChatRequest,
     ConversationCreate,
     ConversationDetail,
     ConversationSummary,
     HealthResponse,
     ModelsResponse,
+    SchemaSuggestRequest,
+    SchemaSuggestResponse,
 )
 from app.tools.sql_query import ping_duckdb
 
@@ -47,6 +55,42 @@ def get_models():
     models = load_models_registry()
     default_id = next((m.id for m in models if m.configured), None)
     return ModelsResponse(models=models, default_model_id=default_id)
+
+
+@app.get("/catalog-status", response_model=CatalogStatusResponse)
+def get_catalog_status():
+    tables = db.list_silver_tables()
+    pdfs = db.list_ready_pdf_files()
+    unverified = [t["table_name"] for t in tables if t.get("review_status") != "verified"]
+    verified = [t["table_name"] for t in tables if t.get("review_status") == "verified"]
+    return CatalogStatusResponse(
+        total_tables=len(tables),
+        total_pdfs=len(pdfs),
+        unverified_tables=unverified,
+        verified_tables=verified,
+    )
+
+
+@app.post("/schema/suggest", response_model=SchemaSuggestResponse)
+async def schema_suggest(body: SchemaSuggestRequest):
+    model_opt = get_model_option(body.model_id)
+    if not model_opt or not model_opt.configured:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{body.model_id}' is unknown or not configured in .env.",
+        )
+    try:
+        result = await suggest_silver_schema(
+            model_id=body.model_id,
+            filename=body.filename,
+            sheet_name=body.sheet_name,
+            raw_rows=body.raw_rows,
+            detected_header_rows=body.detected_header_rows,
+            current_columns=body.current_columns,
+        )
+        return SchemaSuggestResponse(**result)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Schema suggestion failed: {exc}") from exc
 
 
 @app.get("/conversations", response_model=list[ConversationSummary])

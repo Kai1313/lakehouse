@@ -65,6 +65,11 @@ export function DataLakehouseView() {
     }
   }
 
+  function handleReview(file: FileRecord) {
+    setSelectedFileId(file.id);
+    setInspectorTab("review");
+  }
+
   async function handleReingest(fileId: string) {
     try {
       await reingestFile(fileId);
@@ -127,6 +132,7 @@ export function DataLakehouseView() {
         files={files}
         selectedFileId={selectedFileId}
         onInspect={handleInspect}
+        onReview={handleReview}
         onReingest={(id) => void handleReingest(id)}
         onRequestDelete={(file) => setPendingDelete(file)}
       />
@@ -136,10 +142,13 @@ export function DataLakehouseView() {
         onTabChange={setInspectorTab}
         files={files}
         tables={tables}
+        selectedFileId={selectedFileId}
+        onSelectFile={setSelectedFileId}
         selectedTableName={selectedTableName}
         onSelectTable={setSelectedTableName}
         selectedPdfId={selectedPdfId}
         onSelectPdf={setSelectedPdfId}
+        onConfirmed={refreshAll}
       />
 
       <ConfirmDialog

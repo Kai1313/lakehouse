@@ -54,3 +54,32 @@ class ConversationDetail(ConversationSummary):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     model_id: str = Field(min_length=1)
+
+
+class CatalogStatusResponse(BaseModel):
+    total_tables: int
+    total_pdfs: int
+    unverified_tables: list[str] = Field(default_factory=list)
+    verified_tables: list[str] = Field(default_factory=list)
+
+
+class SchemaSuggestRequest(BaseModel):
+    model_id: str = Field(min_length=1)
+    filename: str
+    sheet_name: str
+    raw_rows: list[list[Any]]
+    detected_header_rows: list[int] = Field(default_factory=list)
+    current_columns: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SuggestedColumn(BaseModel):
+    index: int
+    name: str
+    type: str = "VARCHAR"
+    keep: bool = True
+    reason: str = ""
+
+
+class SchemaSuggestResponse(BaseModel):
+    header_rows: list[int]
+    columns: list[SuggestedColumn]

@@ -9,15 +9,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import db, storage
 from app.config import settings
 from app.models_registry import (
+    ConfirmSilverRequest,
     FileChunksResponse,
+    FileRawPreviewResponse,
     FileRecord,
     HealthResponse,
+    RawSheetPreview,
     SilverTableInfo,
     TablePreviewResponse,
     UploadItemResult,
     UploadResponse,
 )
-from app.parsers.excel_parser import read_delta_preview
+from app.parsers.excel_parser import (
+    extract_raw_excel_preview,
+    ingest_excel_bytes,
+    read_delta_preview,
+)
 from app.workers.ingest_pipeline import process_file, purge_file_silver_gold
 
 EXCEL_EXTENSIONS = {".xlsx", ".xls"}
@@ -26,6 +33,7 @@ PDF_EXTENSIONS = {".pdf"}
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    db.ensure_schema_migrations()
     storage.ensure_bucket_exists()
     yield
 
@@ -213,9 +221,120 @@ def preview_table(table_name: str, limit: int = Query(default=20, ge=1, le=200))
     return TablePreviewResponse(
         table_name=table_info["table_name"],
         row_count=table_info["row_count"],
+        review_status=table_info.get("review_status", "needs_review"),
         columns=table_info["columns_json"],
         rows=rows,
     )
+
+
+@app.get("/files/{file_id}/raw-preview", response_model=FileRawPreviewResponse)
+def get_raw_preview(file_id: UUID, rows: int = Query(default=15, ge=5, le=40)):
+    row = db.get_file_by_id(file_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    if row["file_type"] != "excel":
+        return FileRawPreviewResponse(
+            file_id=row["id"],
+            filename=row["filename"],
+            file_type=row["file_type"],
+            review_status=row.get("review_status", "needs_review"),
+            document_note=row.get("document_note", ""),
+            sheets=[],
+        )
+
+    raw_bytes = storage.download_bytes(row["bronze_uri"])
+    raw_sheets = extract_raw_excel_preview(row["filename"], raw_bytes, max_rows=rows)
+    silver_by_sheet = {t["sheet_name"]: t for t in db.get_silver_tables_for_file(file_id)}
+
+    sheets_out: list[RawSheetPreview] = []
+    for sh in raw_sheets:
+        st = silver_by_sheet.get(sh["sheet_name"])
+        header_rows = (
+            st["header_rows_json"]
+            if (st and st.get("header_rows_json"))
+            else sh["detected_header_rows"]
+        )
+        sheets_out.append(
+            RawSheetPreview(
+                sheet_name=sh["sheet_name"],
+                total_raw_rows=sh["total_raw_rows"],
+                rows=sh["rows"],
+                detected_header_rows=header_rows,
+                table_name=st["table_name"] if st else None,
+                review_status=st.get("review_status", "needs_review") if st else "needs_review",
+                columns=st["columns_json"] if st else [],
+            )
+        )
+
+    return FileRawPreviewResponse(
+        file_id=row["id"],
+        filename=row["filename"],
+        file_type=row["file_type"],
+        review_status=row.get("review_status", "needs_review"),
+        document_note=row.get("document_note", ""),
+        sheets=sheets_out,
+    )
+
+
+@app.post("/files/{file_id}/confirm-silver", response_model=FileRecord)
+def confirm_silver(file_id: UUID, body: ConfirmSilverRequest):
+    row = db.get_file_by_id(file_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    if row["file_type"] == "pdf":
+        updated = db.update_file_review(
+            file_id,
+            review_status="verified",
+            document_note=(body.document_note or "").strip(),
+        )
+        updated["silver_tables"] = []
+        return updated
+
+    if row["file_type"] != "excel":
+        raise HTTPException(status_code=400, detail="Unsupported file type for Silver confirmation.")
+
+    raw_bytes = storage.download_bytes(row["bronze_uri"])
+    existing_presets = db.get_mapping_presets_for_filename(row["filename"])
+    overrides_dict: dict[str, dict] = dict(existing_presets)
+
+    for ov in body.sheet_overrides:
+        ov_dict = ov.model_dump()
+        overrides_dict[ov.sheet_name] = ov_dict
+        db.save_mapping_preset(row["filename"], ov.sheet_name, ov_dict)
+
+    purge_file_silver_gold(file_id)
+    tables = ingest_excel_bytes(
+        source_file_id=file_id,
+        filename=row["filename"],
+        raw_bytes=raw_bytes,
+        sheet_overrides=overrides_dict,
+        review_status="verified",
+    )
+    if not tables:
+        raise HTTPException(status_code=400, detail="No non-empty sheets remained after applying mapping.")
+
+    metadata = {
+        "sheets_count": len(tables),
+        "total_rows": sum(t["row_count"] for t in tables),
+        "tables": [t["table_name"] for t in tables],
+    }
+    updated = db.update_file_status(
+        file_id,
+        "ready",
+        error_message=None,
+        metadata_json=metadata,
+        review_status="verified",
+    )
+    if body.document_note is not None:
+        updated = db.update_file_review(
+            file_id,
+            review_status="verified",
+            document_note=body.document_note.strip(),
+        )
+    updated["silver_tables"] = [t["table_name"] for t in tables]
+    return updated
 
 
 @app.get("/files/{file_id}/chunks", response_model=FileChunksResponse)

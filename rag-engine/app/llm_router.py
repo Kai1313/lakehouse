@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, AsyncIterator
 from uuid import UUID
@@ -310,3 +311,83 @@ async def stream_chat_turn(
     except Exception as exc:
         logger.exception("Chat streaming error for conversation_id=%s", conv_id)
         yield _sse("error", {"detail": str(exc)})
+
+
+async def suggest_silver_schema(
+    *,
+    model_id: str,
+    filename: str,
+    sheet_name: str,
+    raw_rows: list[list[Any]],
+    detected_header_rows: list[int],
+    current_columns: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Asks the selected LiteLLM model to suggest header_rows, SQL column names, and types."""
+    numbered_rows = [{"row_index": i, "cells": row} for i, row in enumerate(raw_rows[:15])]
+    prompt_payload = {
+        "filename": filename,
+        "sheet_name": sheet_name,
+        "detected_header_rows": detected_header_rows,
+        "current_columns": current_columns,
+        "raw_rows_preview": numbered_rows,
+    }
+    system_msg = (
+        "You are a Data Engineer reviewing a raw Excel sheet for Silver Delta Lake ingestion.\n"
+        "Inspect the 0-based `raw_rows_preview` (note multi-row merged headers or title banners at top) "
+        "and `current_columns`.\n"
+        "Return ONLY valid JSON with this exact shape:\n"
+        '{"header_rows": [int, ...], "columns": [{"index": int, "name": "snake_case_sql_name", '
+        '"type": "VARCHAR|BIGINT|DOUBLE|BOOLEAN", "keep": true, "reason": "short note"}]}\n'
+        "Rules:\n"
+        "- `header_rows` are the 0-based row indices forming the column headers (e.g. [3, 4] for 2-row merged headers).\n"
+        "- Include every column index from `current_columns` (or matching max width of data rows).\n"
+        "- Use clean snake_case ASCII SQL names (incorporating parent group names like `rencana_alokasi_rp`, `realisasi_total_rp`).\n"
+        "- Allowed types strictly: VARCHAR, BIGINT, DOUBLE, BOOLEAN."
+    )
+
+    extra_kwargs: dict[str, Any] = {}
+    if model_id.startswith("ollama/") and settings.ollama_api_base:
+        extra_kwargs["api_base"] = settings.ollama_api_base
+
+    resp = await litellm.acompletion(
+        model=model_id,
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": json.dumps(prompt_payload, ensure_ascii=False)},
+        ],
+        response_format={"type": "json_object"},
+        **extra_kwargs,
+    )
+    raw_text = (resp.choices[0].message.content or "").strip()
+    raw_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text, flags=re.DOTALL).strip()
+    parsed = json.loads(raw_text)
+
+    allowed_types = {"VARCHAR", "BIGINT", "DOUBLE", "BOOLEAN"}
+    cleaned_cols: list[dict[str, Any]] = []
+    for col in parsed.get("columns", []):
+        col_type = str(col.get("type", "VARCHAR")).upper()
+        if col_type not in allowed_types:
+            col_type = "VARCHAR"
+        clean_name = re.sub(r"[^a-z0-9]+", "_", str(col.get("name", "")).lower()).strip("_")
+        if not clean_name:
+            clean_name = f"col_{int(col.get('index', 0)) + 1}"
+        if clean_name[0].isdigit():
+            clean_name = f"col_{clean_name}"
+        cleaned_cols.append(
+            {
+                "index": int(col.get("index", len(cleaned_cols))),
+                "name": clean_name,
+                "type": col_type,
+                "keep": bool(col.get("keep", True)),
+                "reason": str(col.get("reason", ""))[:120],
+            }
+        )
+
+    header_rows = [int(r) for r in parsed.get("header_rows", detected_header_rows) if isinstance(r, (int, float))]
+    if not header_rows:
+        header_rows = detected_header_rows or [0]
+
+    return {
+        "header_rows": sorted(set(header_rows)),
+        "columns": cleaned_cols,
+    }

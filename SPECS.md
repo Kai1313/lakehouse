@@ -284,7 +284,7 @@ DEFAULT_SYSTEM_PROMPT=
 
 ## 8. Implementation Sequence for Next Session
 
-> See [`TASKS.md`](./TASKS.md) for the granular, 7-phase task checklist with per-phase **Test & Review Checkpoints** so you can test and revise after each phase.
+> See [`TASKS.md`](./TASKS.md) for the granular, 8-phase task checklist with per-phase **Test & Review Checkpoints** so you can test and revise after each phase.
 
 When continuing in a new session, build and verify phase-by-phase following `TASKS.md`:
 1. **Phase 1 — Infrastructure & Lakehouse Foundation**: `.env.example`, `infra/postgres/init.sql`, `infra/nginx/default.conf`, and `docker-compose.yml` (`minio`, `postgres`, `minio-init`, plus full stack profile).
@@ -294,3 +294,11 @@ When continuing in a new session, build and verify phase-by-phase following `TAS
 5. **Phase 5 — `rag-engine/`**: `uv` project, `models.yaml` + `GET /models`, conversation/message persistence, DuckDB Delta S3 reader + SQL guardrails, `pgvector` retriever, LiteLLM streaming + dual tool-calling loop, SSE endpoint.
 6. **Phase 6 — `ui/` Chat Workspace**: Wire `AI Chat` tab to `rag-engine/` (threads, live model dropdown, streaming markdown, PDF/SQL citation cards).
 7. **Phase 7 — Full Docker Integration & Verification**: Service `Dockerfile`s, full `docker compose --profile full up --build` behind Nginx, `README.md`, and end-to-end smoke test.
+8. **Phase 8 — Smart Excel Headers & Silver HITL Review**: Multi-row merged Excel header coalescing, locale-aware numeric parsing, saved mapping presets (`data_engine.silver_mapping_presets`), `GET /files/{id}/raw-preview`, `POST /files/{id}/confirm-silver`, `POST /schema/suggest` (`rag-engine`), and inline `Review & Edit Schema` UI (`needs_review` $\rightarrow$ `verified`).
+
+---
+
+## 9. Tech Debt & Deferred Scope
+
+- **TD-1 — Gold Business Glossary & KPI Rules**: User-editable column descriptions, official domain KPI formulas (e.g., authoritative Budget/Pagu vs. Realisasi/Overbudget/Serapan definitions), Gold materialized analytical views, and cross-file join specifications.
+- **TD-2 — Vision/OCR Fallback for Scanned PDFs**: Automatic OCR/Vision LLM extraction for PDF pages flagged `needs_ocr: true`.

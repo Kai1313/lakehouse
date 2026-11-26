@@ -1,10 +1,12 @@
 import { useId } from "react";
 import {
   AlertTriangle,
+  CheckCircle2,
   Eye,
   FileSpreadsheet,
   FileText,
   RefreshCw,
+  SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 import type { FileRecord, FileStatus } from "../../api/dataClient";
@@ -13,6 +15,7 @@ interface FileRegistryTableProps {
   files: FileRecord[];
   selectedFileId: string | null;
   onInspect: (file: FileRecord) => void;
+  onReview: (file: FileRecord) => void;
   onReingest: (fileId: string) => void;
   onRequestDelete: (file: FileRecord) => void;
 }
@@ -36,6 +39,7 @@ export function FileRegistryTable({
   files,
   selectedFileId,
   onInspect,
+  onReview,
   onReingest,
   onRequestDelete,
 }: FileRegistryTableProps) {
@@ -112,14 +116,32 @@ export function FileRegistryTable({
 
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
-                        <span
-                          className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[file.status]}`}
-                        >
-                          {isActive && (
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[file.status]}`}
+                          >
+                            {isActive && (
+                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                            )}
+                            {file.status}
+                          </span>
+                          {file.status === "ready" && (
+                            <span
+                              className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                file.review_status === "verified"
+                                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                                  : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                              }`}
+                            >
+                              {file.review_status === "verified" ? (
+                                <CheckCircle2 className="h-3 w-3" />
+                              ) : (
+                                <AlertTriangle className="h-3 w-3" />
+                              )}
+                              {file.review_status === "verified" ? "Verified" : "Needs Review"}
+                            </span>
                           )}
-                          {file.status}
-                        </span>
+                        </div>
                         {file.error_message && (
                           <span className="max-w-xs text-xs text-rose-400">
                             {file.error_message}
@@ -161,6 +183,20 @@ export function FileRegistryTable({
 
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onReview(file)}
+                          disabled={file.status !== "ready"}
+                          title="Review headers, column names, types, or PDF context"
+                          className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+                            file.review_status === "needs_review" && file.status === "ready"
+                              ? "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                              : "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                          }`}
+                        >
+                          <SlidersHorizontal className="h-3.5 w-3.5" />
+                          Review
+                        </button>
                         <button
                           type="button"
                           onClick={() => onInspect(file)}

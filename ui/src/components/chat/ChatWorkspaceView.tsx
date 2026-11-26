@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  AlertTriangle,
   Bot,
   Cpu,
   MessageSquarePlus,
@@ -14,10 +15,12 @@ import {
 import {
   createConversation,
   deleteConversation,
+  getCatalogStatus,
   getConversation,
   listConversations,
   listModels,
   streamChat,
+  type CatalogStatusResponse,
   type CitationsPayload,
   type ConversationSummary,
   type MessageRecord,
@@ -59,6 +62,7 @@ export function ChatWorkspaceView() {
   const [streamingText, setStreamingText] = useState("");
   const [streamingTraces, setStreamingTraces] = useState<ToolTrace[]>([]);
   const [streamingCitations, setStreamingCitations] = useState<CitationsPayload | null>(null);
+  const [catalogStatus, setCatalogStatus] = useState<CatalogStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const modelsByProvider = useMemo(() => {
@@ -72,7 +76,11 @@ export function ChatWorkspaceView() {
 
   const loadBootstrap = useCallback(async () => {
     try {
-      const [modelsResp, convList] = await Promise.all([listModels(), listConversations()]);
+      const [modelsResp, convList, catStatus] = await Promise.all([
+        listModels(),
+        listConversations(),
+        getCatalogStatus().catch(() => null),
+      ]);
       setModels(modelsResp.models);
       if (modelsResp.default_model_id) {
         setSelectedModelId((prev) => prev || modelsResp.default_model_id || "");
@@ -81,6 +89,7 @@ export function ChatWorkspaceView() {
       if (convList.length > 0) {
         setActiveConvId((prev) => prev ?? convList[0].id);
       }
+      if (catStatus) setCatalogStatus(catStatus);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect to rag-engine (:8002).");
@@ -348,6 +357,23 @@ export function ChatWorkspaceView() {
             className="mx-4 mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300"
           >
             {error}
+          </div>
+        )}
+
+        {catalogStatus && catalogStatus.unverified_tables.length > 0 && (
+          <div
+            role="status"
+            className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <span>
+              <strong>{catalogStatus.unverified_tables.length}</strong> Silver{" "}
+              {catalogStatus.unverified_tables.length === 1 ? "table is" : "tables are"} still{" "}
+              <strong>Needs Review</strong> (
+              <code>{catalogStatus.unverified_tables.join(", ")}</code>). You can still query
+              immediately, or verify column headers &amp; types in the{" "}
+              <strong>Data Lakehouse &rarr; Review &amp; Edit Schema</strong> tab.
+            </span>
           </div>
         )}
 

@@ -100,3 +100,51 @@ def test_live_tools_and_streaming_chat():
             assert conv_detail["title"] != "New Conversation"
         finally:
             client.delete(f"/conversations/{conv_id}")
+
+
+def test_catalog_status_and_schema_suggest(monkeypatch):
+    async def fake_suggest_silver_schema(**kwargs):
+        return {
+            "header_rows": [3, 4],
+            "columns": [
+                {
+                    "index": 0,
+                    "name": "rencana_alokasi_rp",
+                    "type": "BIGINT",
+                    "keep": True,
+                    "reason": "Merged Rencana + Alokasi currency column",
+                }
+            ],
+        }
+
+    monkeypatch.setattr("app.main.suggest_silver_schema", fake_suggest_silver_schema)
+
+    with TestClient(app) as client:
+        r_status = client.get("/catalog-status")
+        assert r_status.status_code == 200
+        status_data = r_status.json()
+        assert isinstance(status_data["total_tables"], int)
+        assert isinstance(status_data["total_pdfs"], int)
+        assert isinstance(status_data["unverified_tables"], list)
+        assert isinstance(status_data["verified_tables"], list)
+
+        models_resp = client.get("/models").json()
+        configured = [m["id"] for m in models_resp["models"] if m["configured"]]
+        if not configured:
+            pytest.skip("No configured LLM API keys in .env")
+
+        r_suggest = client.post(
+            "/schema/suggest",
+            json={
+                "model_id": configured[0],
+                "filename": "report.xlsx",
+                "sheet_name": "Sheet1",
+                "raw_rows": [["Title"], ["Rencana"], ["Alokasi (Rp)"], [50000000]],
+                "detected_header_rows": [1, 2],
+                "current_columns": [{"index": 0, "name": "rencana_alokasi_rp", "original_name": "Rencana / Alokasi (Rp)", "type": "BIGINT"}],
+            },
+        )
+        assert r_suggest.status_code == 200
+        s_data = r_suggest.json()
+        assert s_data["header_rows"] == [3, 4]
+        assert s_data["columns"][0]["name"] == "rencana_alokasi_rp"

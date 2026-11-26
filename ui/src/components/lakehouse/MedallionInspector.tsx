@@ -1,5 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertTriangle, FileSpreadsheet, FileText, Search, Table2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileSpreadsheet,
+  FileText,
+  Search,
+  SlidersHorizontal,
+  Table2,
+} from "lucide-react";
 import {
   getFileChunks,
   previewTable,
@@ -8,18 +16,22 @@ import {
   type SilverTableInfo,
   type TablePreviewResponse,
 } from "../../api/dataClient";
+import { SchemaReviewPanel } from "./SchemaReviewPanel";
 
-export type InspectorTab = "tables" | "chunks";
+export type InspectorTab = "tables" | "chunks" | "review";
 
 interface MedallionInspectorProps {
   activeTab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
   files: FileRecord[];
   tables: SilverTableInfo[];
+  selectedFileId: string | null;
+  onSelectFile: (id: string) => void;
   selectedTableName: string | null;
   onSelectTable: (name: string) => void;
   selectedPdfId: string | null;
   onSelectPdf: (id: string) => void;
+  onConfirmed: () => void | Promise<void>;
 }
 
 export function MedallionInspector({
@@ -27,13 +39,17 @@ export function MedallionInspector({
   onTabChange,
   files,
   tables,
+  selectedFileId,
+  onSelectFile,
   selectedTableName,
   onSelectTable,
   selectedPdfId,
   onSelectPdf,
+  onConfirmed,
 }: MedallionInspectorProps) {
   const tablesTabId = useId();
   const chunksTabId = useId();
+  const reviewTabId = useId();
   const previewCaptionId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -128,12 +144,23 @@ export function MedallionInspector({
     return Array.from({ length: count }, (_, i) => i + 1);
   }, [activePdf?.metadata_json?.page_count]);
 
+  const needsReviewCount = useMemo(
+    () => files.filter((f) => f.status === "ready" && f.review_status === "needs_review").length,
+    [files],
+  );
+
   function handleTabKeyDown(e: React.KeyboardEvent, idx: number) {
-    const nextTab: InspectorTab = idx === 0 ? "chunks" : "tables";
-    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    const order: InspectorTab[] = ["tables", "chunks", "review"];
+    if (e.key === "ArrowRight") {
       e.preventDefault();
-      onTabChange(nextTab);
-      tabRefs.current[idx === 0 ? 1 : 0]?.focus();
+      const nextIdx = (idx + 1) % order.length;
+      onTabChange(order[nextIdx]);
+      tabRefs.current[nextIdx]?.focus();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      const prevIdx = (idx - 1 + order.length) % order.length;
+      onTabChange(order[prevIdx]);
+      tabRefs.current[prevIdx]?.focus();
     }
   }
 
@@ -192,6 +219,37 @@ export function MedallionInspector({
               {pdfFiles.length}
             </span>
           </button>
+
+          <button
+            ref={(el) => {
+              tabRefs.current[2] = el;
+            }}
+            id={reviewTabId}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "review"}
+            tabIndex={activeTab === "review" ? 0 : -1}
+            onClick={() => onTabChange("review")}
+            onKeyDown={(e) => handleTabKeyDown(e, 2)}
+            className={`inline-flex shrink-0 items-center gap-2 pb-3 text-sm font-medium transition-colors ${
+              activeTab === "review"
+                ? "text-indigo-300"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Review &amp; Edit Schema
+            {needsReviewCount > 0 ? (
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-300">
+                {needsReviewCount} pending
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300">
+                <CheckCircle2 className="h-3 w-3" />
+                ok
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -248,9 +306,25 @@ export function MedallionInspector({
               {activeTableMeta && (
                 <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                    <span>
-                      Delta URI: <code className="text-slate-300">{activeTableMeta.delta_uri}</code>
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>
+                        Delta URI: <code className="text-slate-300">{activeTableMeta.delta_uri}</code>
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                          activeTableMeta.review_status === "verified"
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                            : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                        }`}
+                      >
+                        {activeTableMeta.review_status === "verified" ? (
+                          <CheckCircle2 className="h-3 w-3" />
+                        ) : (
+                          <AlertTriangle className="h-3 w-3" />
+                        )}
+                        {activeTableMeta.review_status === "verified" ? "Verified" : "Needs Review"}
+                      </span>
+                    </div>
                     <span>{activeTableMeta.row_count.toLocaleString()} total rows</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -465,6 +539,23 @@ export function MedallionInspector({
               )}
             </>
           )}
+        </div>
+      </div>
+
+      {/* Panel 3: HITL Silver Schema & PDF Context Review */}
+      <div
+        role="tabpanel"
+        aria-labelledby={reviewTabId}
+        hidden={activeTab !== "review"}
+        tabIndex={activeTab === "review" ? 0 : undefined}
+      >
+        <div className="p-5">
+          <SchemaReviewPanel
+            files={files}
+            selectedFileId={selectedFileId}
+            onSelectFile={onSelectFile}
+            onConfirmed={onConfirmed}
+          />
         </div>
       </div>
     </section>

@@ -12,6 +12,11 @@ export function KpiBar({ files, tables }: KpiBarProps) {
     ["queued", "bronze", "silver", "gold"].includes(f.status),
   ).length;
   const failedCount = files.filter((f) => f.status === "failed").length;
+  const verifiedFilesCount = files.filter(
+    (f) => f.status === "ready" && f.review_status === "verified",
+  ).length;
+  const verifiedTablesCount = tables.filter((t) => t.review_status === "verified").length;
+  const needsReviewTablesCount = tables.length - verifiedTablesCount;
 
   const totalChunks = files.reduce(
     (acc, f) => acc + (f.metadata_json?.chunk_count ?? 0),
@@ -28,16 +33,16 @@ export function KpiBar({ files, tables }: KpiBarProps) {
           ? `${processingCount} processing...`
           : failedCount > 0
             ? `${failedCount} failed`
-            : "All files ready",
+            : `${verifiedFilesCount} verified · ${readyCount - verifiedFilesCount} needs review`,
       icon: CheckCircle2,
       accent: failedCount > 0 ? "text-amber-400" : "text-emerald-400",
     },
     {
       label: "Silver Delta Tables",
       value: String(tables.length),
-      sub: `${tables.reduce((acc, t) => acc + t.row_count, 0).toLocaleString()} total rows`,
+      sub: `${tables.reduce((acc, t) => acc + t.row_count, 0).toLocaleString()} rows · ${verifiedTablesCount} verified`,
       icon: FileSpreadsheet,
-      accent: "text-indigo-400",
+      accent: needsReviewTablesCount > 0 ? "text-amber-400" : "text-indigo-400",
     },
     {
       label: "Gold PDF Chunks",

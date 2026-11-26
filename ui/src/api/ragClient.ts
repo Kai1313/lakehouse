@@ -73,6 +73,35 @@ export interface StreamCallbacks {
   onError?: (detail: string) => void;
 }
 
+export interface CatalogStatusResponse {
+  total_tables: number;
+  total_pdfs: number;
+  unverified_tables: string[];
+  verified_tables: string[];
+}
+
+export interface SchemaSuggestRequest {
+  model_id: string;
+  filename: string;
+  sheet_name: string;
+  raw_rows: unknown[][];
+  detected_header_rows: number[];
+  current_columns: Record<string, unknown>[];
+}
+
+export interface SuggestedColumn {
+  index: number;
+  name: string;
+  type: "VARCHAR" | "BIGINT" | "DOUBLE" | "BOOLEAN";
+  keep: boolean;
+  reason: string;
+}
+
+export interface SchemaSuggestResponse {
+  header_rows: number[];
+  columns: SuggestedColumn[];
+}
+
 const BASE = "/api/rag";
 
 async function parseError(res: Response): Promise<string> {
@@ -93,6 +122,22 @@ export async function getRagHealth(): Promise<RagHealthStatus> {
 
 export async function listModels(): Promise<ModelsResponse> {
   const res = await fetch(`${BASE}/models`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getCatalogStatus(): Promise<CatalogStatusResponse> {
+  const res = await fetch(`${BASE}/catalog-status`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function suggestSchema(payload: SchemaSuggestRequest): Promise<SchemaSuggestResponse> {
+  const res = await fetch(`${BASE}/schema/suggest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

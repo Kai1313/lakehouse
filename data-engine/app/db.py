@@ -15,6 +15,46 @@ def get_conn() -> Iterator[psycopg.Connection[Any]]:
         yield conn
 
 
+def ensure_schema_migrations() -> None:
+    """Idempotent migrations for existing Postgres volumes created before Phase 8."""
+    statements = [
+        """
+        ALTER TABLE data_engine.file_registry
+            ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'needs_review'
+        """,
+        """
+        ALTER TABLE data_engine.file_registry
+            ADD COLUMN IF NOT EXISTS document_note TEXT NOT NULL DEFAULT ''
+        """,
+        """
+        ALTER TABLE data_engine.silver_tables
+            ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'needs_review'
+        """,
+        """
+        ALTER TABLE data_engine.silver_tables
+            ADD COLUMN IF NOT EXISTS header_rows_json JSONB NOT NULL DEFAULT '[]'::jsonb
+        """,
+        """
+        ALTER TABLE data_engine.silver_tables
+            ADD COLUMN IF NOT EXISTS mapping_override_json JSONB NOT NULL DEFAULT '{}'::jsonb
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS data_engine.silver_mapping_presets (
+            filename TEXT NOT NULL,
+            sheet_name TEXT NOT NULL,
+            mapping_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY (filename, sheet_name)
+        )
+        """,
+    ]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for stmt in statements:
+                cur.execute(stmt)
+        conn.commit()
+
+
 def ping_db() -> bool:
     try:
         with get_conn() as conn:
@@ -93,6 +133,8 @@ def create_file_record(
     file_size_bytes: int,
     bronze_uri: str,
     status: str = "bronze",
+    review_status: str = "needs_review",
+    document_note: str = "",
     metadata_json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     with get_conn() as conn:
@@ -101,9 +143,9 @@ def create_file_record(
                 """
                 INSERT INTO data_engine.file_registry (
                     id, filename, file_type, file_hash, file_size_bytes,
-                    bronze_uri, status, metadata_json
+                    bronze_uri, status, review_status, document_note, metadata_json
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -114,6 +156,8 @@ def create_file_record(
                     file_size_bytes,
                     bronze_uri,
                     status,
+                    review_status,
+                    document_note,
                     Jsonb(metadata_json or {}),
                 ),
             )
@@ -128,33 +172,64 @@ def update_file_status(
     *,
     error_message: str | None = None,
     metadata_json: dict[str, Any] | None = None,
+    review_status: str | None = None,
 ) -> dict[str, Any] | None:
     with get_conn() as conn:
         with conn.cursor() as cur:
+            sets = ["status = %s", "error_message = %s", "updated_at = now()"]
+            params: list[Any] = [status, error_message]
             if metadata_json is not None:
+                sets.append("metadata_json = %s")
+                params.append(Jsonb(metadata_json))
+            if review_status is not None:
+                sets.append("review_status = %s")
+                params.append(review_status)
+            params.append(file_id)
+
+            cur.execute(
+                f"""
+                UPDATE data_engine.file_registry
+                SET {", ".join(sets)}
+                WHERE id = %s
+                RETURNING *
+                """,
+                params,
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return row
+
+
+def update_file_review(
+    file_id: UUID,
+    *,
+    review_status: str,
+    document_note: str | None = None,
+) -> dict[str, Any] | None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if document_note is not None:
                 cur.execute(
                     """
                     UPDATE data_engine.file_registry
-                    SET status = %s,
-                        error_message = %s,
-                        metadata_json = %s,
+                    SET review_status = %s,
+                        document_note = %s,
                         updated_at = now()
                     WHERE id = %s
                     RETURNING *
                     """,
-                    (status, error_message, Jsonb(metadata_json), file_id),
+                    (review_status, document_note, file_id),
                 )
             else:
                 cur.execute(
                     """
                     UPDATE data_engine.file_registry
-                    SET status = %s,
-                        error_message = %s,
+                    SET review_status = %s,
                         updated_at = now()
                     WHERE id = %s
                     RETURNING *
                     """,
-                    (status, error_message, file_id),
+                    (review_status, file_id),
                 )
             row = cur.fetchone()
         conn.commit()
@@ -183,6 +258,9 @@ def upsert_silver_table(
     row_count: int,
     columns: list[dict[str, Any]],
     sample_rows: list[dict[str, Any]],
+    review_status: str = "needs_review",
+    header_rows: list[int] | None = None,
+    mapping_override: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -190,15 +268,19 @@ def upsert_silver_table(
                 """
                 INSERT INTO data_engine.silver_tables (
                     source_file_id, table_name, original_filename, sheet_name,
-                    delta_uri, row_count, columns_json, sample_rows_json
+                    delta_uri, row_count, review_status, header_rows_json,
+                    mapping_override_json, columns_json, sample_rows_json
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (table_name) DO UPDATE SET
                     source_file_id = EXCLUDED.source_file_id,
                     original_filename = EXCLUDED.original_filename,
                     sheet_name = EXCLUDED.sheet_name,
                     delta_uri = EXCLUDED.delta_uri,
                     row_count = EXCLUDED.row_count,
+                    review_status = EXCLUDED.review_status,
+                    header_rows_json = EXCLUDED.header_rows_json,
+                    mapping_override_json = EXCLUDED.mapping_override_json,
                     columns_json = EXCLUDED.columns_json,
                     sample_rows_json = EXCLUDED.sample_rows_json,
                     created_at = now()
@@ -211,6 +293,9 @@ def upsert_silver_table(
                     sheet_name,
                     delta_uri,
                     row_count,
+                    review_status,
+                    Jsonb(header_rows or []),
+                    Jsonb(mapping_override or {}),
                     Jsonb(columns),
                     Jsonb(sample_rows),
                 ),
@@ -218,6 +303,36 @@ def upsert_silver_table(
             row = cur.fetchone()
         conn.commit()
     return row
+
+
+def save_mapping_preset(filename: str, sheet_name: str, mapping: dict[str, Any]) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO data_engine.silver_mapping_presets (filename, sheet_name, mapping_json, updated_at)
+                VALUES (%s, %s, %s, now())
+                ON CONFLICT (filename, sheet_name) DO UPDATE SET
+                    mapping_json = EXCLUDED.mapping_json,
+                    updated_at = now()
+                """,
+                (filename, sheet_name, Jsonb(mapping)),
+            )
+        conn.commit()
+
+
+def get_mapping_presets_for_filename(filename: str) -> dict[str, dict[str, Any]]:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT sheet_name, mapping_json
+                FROM data_engine.silver_mapping_presets
+                WHERE filename = %s
+                """,
+                (filename,),
+            )
+            return {row["sheet_name"]: row["mapping_json"] for row in cur.fetchall()}
 
 
 def list_silver_tables() -> list[dict[str, Any]]:
@@ -246,7 +361,7 @@ def get_silver_tables_for_file(file_id: UUID) -> list[dict[str, Any]]:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT * FROM data_engine.silver_tables WHERE source_file_id = %s",
+                "SELECT * FROM data_engine.silver_tables WHERE source_file_id = %s ORDER BY sheet_name ASC",
                 (file_id,),
             )
             return cur.fetchall()

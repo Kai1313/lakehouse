@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS data_engine.file_registry (
     file_size_bytes BIGINT NOT NULL DEFAULT 0,
     bronze_uri TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('queued', 'bronze', 'silver', 'gold', 'ready', 'failed')),
+    review_status TEXT NOT NULL DEFAULT 'needs_review' CHECK (review_status IN ('needs_review', 'verified')),
+    document_note TEXT NOT NULL DEFAULT '',
     error_message TEXT,
     metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -38,9 +40,20 @@ CREATE TABLE IF NOT EXISTS data_engine.silver_tables (
     sheet_name TEXT NOT NULL,
     delta_uri TEXT NOT NULL,
     row_count INTEGER NOT NULL DEFAULT 0,
+    review_status TEXT NOT NULL DEFAULT 'needs_review' CHECK (review_status IN ('needs_review', 'verified')),
+    header_rows_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    mapping_override_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     columns_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     sample_rows_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS data_engine.silver_mapping_presets (
+    filename TEXT NOT NULL,
+    sheet_name TEXT NOT NULL,
+    mapping_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (filename, sheet_name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_silver_tables_source_file
