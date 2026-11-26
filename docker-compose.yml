@@ -74,6 +74,12 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-lakehouse}:${POSTGRES_PASSWORD:-lakehouse_secret}@postgres:5432/${POSTGRES_DB:-lakehouse_db}
       MINIO_ENDPOINT: http://minio:9000
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   rag-engine:
     build:
@@ -92,6 +98,13 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-lakehouse}:${POSTGRES_PASSWORD:-lakehouse_secret}@postgres:5432/${POSTGRES_DB:-lakehouse_db}
       MINIO_ENDPOINT: http://minio:9000
+      OLLAMA_API_BASE: http://host.docker.internal:11434
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   ui:
     build:
@@ -99,21 +112,38 @@ services:
     container_name: lakehouse-ui
     profiles: ["full"]
     depends_on:
-      - data-engine
-      - rag-engine
+      data-engine:
+        condition: service_healthy
+      rag-engine:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   nginx:
     image: nginx:1.27-alpine
     container_name: lakehouse-nginx
     profiles: ["full"]
     depends_on:
-      - ui
-      - data-engine
-      - rag-engine
+      ui:
+        condition: service_healthy
+      data-engine:
+        condition: service_healthy
+      rag-engine:
+        condition: service_healthy
     ports:
       - "3000:80"
     volumes:
       - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 volumes:
   minio_data:
