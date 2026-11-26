@@ -141,10 +141,10 @@
 **Goal**: Containerize `data-engine`, `rag-engine`, and `ui`, verify full `docker compose` startup behind Nginx, and document usage.
 
 ### Tasks
-- [ ] **7.1** Create production `Dockerfile`s for `data-engine/`, `rag-engine/`, and `ui/`.
-- [ ] **7.2** Verify `docker compose --profile full up --build` starts all services (`minio`, `postgres`, `data-engine`, `rag-engine`, `ui`, `nginx`) cleanly with health checks.
-- [ ] **7.3** Create `README.md` with setup instructions for both full Docker mode and local hot-reload dev mode.
-- [ ] **7.4** Run end-to-end smoke check through Nginx (`http://localhost:3000`): upload $\rightarrow$ inspect $\rightarrow$ multi-model chat $\rightarrow$ delete.
+- [x] **7.1** Create production `Dockerfile`s for `data-engine/`, `rag-engine/`, and `ui/`.
+- [x] **7.2** Verify `docker compose --profile full up --build` starts all services (`minio`, `postgres`, `data-engine`, `rag-engine`, `ui`, `nginx`) cleanly with health checks.
+- [x] **7.3** Create `README.md` with setup instructions for both full Docker mode and local hot-reload dev mode.
+- [x] **7.4** Run end-to-end smoke check through Nginx (`http://localhost:3000`): upload $\rightarrow$ inspect $\rightarrow$ multi-model chat $\rightarrow$ delete.
 
 ### Phase 7 Test & Review Checkpoint
 - Run `docker compose --profile full up --build` from a clean state.

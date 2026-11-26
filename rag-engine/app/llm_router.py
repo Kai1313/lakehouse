@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -160,45 +161,55 @@ async def stream_chat_turn(
             if model_id.startswith("ollama/") and settings.ollama_api_base:
                 extra_kwargs["api_base"] = settings.ollama_api_base
 
-            stream = await litellm.acompletion(
-                model=model_id,
-                messages=messages,
-                tools=TOOL_DEFINITIONS,
-                tool_choice="auto",
-                stream=True,
-                **extra_kwargs,
-            )
-
             round_text_parts: list[str] = []
             tool_calls_acc: dict[int, dict[str, str]] = {}
 
-            async for chunk in stream:
-                choices = getattr(chunk, "choices", None) or []
-                if not choices:
-                    continue
-                delta = choices[0].delta
-
-                delta_content = getattr(delta, "content", None)
-                if delta_content:
-                    round_text_parts.append(delta_content)
-                    final_answer_parts.append(delta_content)
-                    yield _sse("token", {"delta": delta_content})
-
-                delta_tools = getattr(delta, "tool_calls", None) or []
-                for tc in delta_tools:
-                    idx = getattr(tc, "index", 0) or 0
-                    entry = tool_calls_acc.setdefault(
-                        idx,
-                        {"id": "", "name": "", "arguments": ""},
+            for attempt in range(3):
+                try:
+                    stream = await litellm.acompletion(
+                        model=model_id,
+                        messages=messages,
+                        tools=TOOL_DEFINITIONS,
+                        tool_choice="auto",
+                        stream=True,
+                        **extra_kwargs,
                     )
-                    if getattr(tc, "id", None):
-                        entry["id"] = tc.id
-                    fn = getattr(tc, "function", None)
-                    if fn:
-                        if getattr(fn, "name", None):
-                            entry["name"] += fn.name
-                        if getattr(fn, "arguments", None):
-                            entry["arguments"] += fn.arguments
+
+                    async for chunk in stream:
+                        choices = getattr(chunk, "choices", None) or []
+                        if not choices:
+                            continue
+                        delta = choices[0].delta
+
+                        delta_content = getattr(delta, "content", None)
+                        if delta_content:
+                            round_text_parts.append(delta_content)
+                            final_answer_parts.append(delta_content)
+                            yield _sse("token", {"delta": delta_content})
+
+                        delta_tools = getattr(delta, "tool_calls", None) or []
+                        for tc in delta_tools:
+                            idx = getattr(tc, "index", 0) or 0
+                            entry = tool_calls_acc.setdefault(
+                                idx,
+                                {"id": "", "name": "", "arguments": ""},
+                            )
+                            if getattr(tc, "id", None):
+                                entry["id"] = tc.id
+                            fn = getattr(tc, "function", None)
+                            if fn:
+                                if getattr(fn, "name", None):
+                                    entry["name"] += fn.name
+                                if getattr(fn, "arguments", None):
+                                    entry["arguments"] += fn.arguments
+                    break
+                except (litellm.ServiceUnavailableError, litellm.RateLimitError, litellm.MidStreamFallbackError) as retry_exc:
+                    # Only retry cleanly if no partial tokens or tool calls were emitted yet
+                    if attempt < 2 and not round_text_parts and not tool_calls_acc:
+                        yield _sse("status", {"message": f"Provider busy, retrying ({attempt + 1}/2)..."})
+                        await asyncio.sleep(1.5 * (attempt + 1))
+                        continue
+                    raise retry_exc
 
             round_text = "".join(round_text_parts)
             ordered_tools = [tool_calls_acc[k] for k in sorted(tool_calls_acc.keys())]

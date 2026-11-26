@@ -5,20 +5,26 @@ models:
     env_key: DEEPSEEK_API_KEY
     supports_tools: true
 
+  - id: gemini/gemini-3.8-flash
+    label: Gemini 3.8 Flash
+    provider: gemini
+    env_key: GEMINI_API_KEY
+    supports_tools: true
+
+  - id: gemini/gemini-3.5-flash
+    label: Gemini 3.5 Flash
+    provider: gemini
+    env_key: GEMINI_API_KEY
+    supports_tools: true
+
   - id: deepseek/deepseek-reasoner
     label: DeepSeek Reasoner (R1)
     provider: deepseek
     env_key: DEEPSEEK_API_KEY
     supports_tools: true
 
-  - id: gemini/gemini-2.5-flash
-    label: Gemini 2.5 Flash
-    provider: gemini
-    env_key: GEMINI_API_KEY
-    supports_tools: true
-
-  - id: gemini/gemini-2.5-pro
-    label: Gemini 2.5 Pro
+  - id: gemini/gemini-4-hydrogen
+    label: Gemini 4 Hydrogen
     provider: gemini
     env_key: GEMINI_API_KEY
     supports_tools: true
